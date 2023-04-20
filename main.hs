@@ -53,9 +53,9 @@ instance Layer MLP where
     fromList layers tensors = do
             let layer = head layers 
                 relParams = Prelude.take (numParams layer) tensors
-            val <- sequence [fromList layer relParams]
+            val <- fromList layer relParams
             tailValues <- fromList (tail layers) (drop (numParams layer) tensors)
-            return (val ++ tailValues)
+            return (val:tailValues)
         
 mysgd :: Tensor -> [Parameter] -> [Tensor] -> [Tensor]
 mysgd lr params grads = map (\(p, g) -> (toDependent p) - lr * g) (zip params grads)
