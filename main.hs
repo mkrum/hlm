@@ -13,29 +13,30 @@ class Layer layer where
     fromList :: layer -> [Tensor] -> IO layer
 
 data LinearLayer = LinearLayer {
-    n :: Int,
     w :: Parameter,
     b :: Parameter
 }
 
 mkLinear :: Int -> Int -> IO LinearLayer
 mkLinear nIn nOut = do
-        w1 <- makeIndependent $ ones' [nIn, nOut]
-        b1 <- makeIndependent $ ones' [1, nOut]
-        return (LinearLayer 2 w1 b1)
+        randomW <- randIO' [nIn, nOut]
+        w1 <- makeIndependent $ randomW
+        randomB <- randIO' [1, nOut]
+        b1 <- makeIndependent $ randomB
+        return (LinearLayer w1 b1)
 
 instance Layer LinearLayer where
 
-    numParams LinearLayer{n, w, b} = n
+    numParams LinearLayer{w, b} = 2
 
-    toList LinearLayer{n, w, b} = [w, b]
+    toList LinearLayer{w, b} = [w, b]
 
     fromList layer params = do
             w <- makeIndependent $ (params !! 0)
             b <- makeIndependent $ (params !! 1)
-            return (LinearLayer 2 w b)
+            return (LinearLayer w b)
     
-    apply LinearLayer{n, w, b} input = 
+    apply LinearLayer{w, b} input = 
             let v1 = (input `matmul` (toDependent w)) 
                 v2 = (toDependent b)
             in v1 + v2
@@ -76,16 +77,18 @@ update model (xi, target) = do
   printTensor loss
   return model
 
-
 main :: IO ()
 main = do
     
   xi <- makeIndependent $ ones' [10, 4]
   target <- makeIndependent $ ones' [10, 1]
+
   let dataList  = (Prelude.take 100 (Prelude.repeat (xi, target)))
   -- initialize model
   l <- sequence [ (mkLinear 4 3), (mkLinear 3 1) ] 
+  -- train model
   output <- foldM update l dataList
+  -- Evaluate final loss
   update output (dataList !! 0)
   putStrLn "done"
 
