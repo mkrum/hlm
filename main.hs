@@ -1,5 +1,6 @@
 
 import Torch
+import Control.Monad
 
 printTensor :: Tensor -> IO ()
 printTensor t = do
@@ -60,30 +61,31 @@ instance Layer MLP where
 mysgd :: Tensor -> [Parameter] -> [Tensor] -> [Tensor]
 mysgd lr params grads = map (\(p, g) -> (toDependent p) - lr * g) (zip params grads)
 
+update :: MLP -> (IndependentTensor, IndependentTensor) -> IO MLP
+update model (xi, target) = do
+
+  let lr = 0.001 * (ones' [1])
+      x = toDependent xi
+      t = toDependent target
+      o = apply model x
+      loss = mean $ (o - t) ^ 2
+      gradients = grad loss (toList model)
+      output = mysgd lr (toList model) gradients
+
+  model <- fromList model output
+  printTensor loss
+  return model
+
+
 main :: IO ()
 main = do
-
+    
   xi <- makeIndependent $ ones' [10, 4]
   target <- makeIndependent $ ones' [10, 1]
-
+  let dataList  = (Prelude.take 100 (Prelude.repeat (xi, target)))
+  -- initialize model
   l <- sequence [ (mkLinear 4 3), (mkLinear 3 1) ] 
+  output <- foldM update l dataList
+  update output (dataList !! 0)
+  putStrLn "done"
 
-  let x = toDependent xi
-      t = toDependent target
-      o = apply l x
-      loss = mean $ (o - t) ^ 2
-      gradients = grad loss (toList l)
-      output = mysgd ((zeros' [1]) + 0.001) (toList l) gradients
-   
-  printTensor loss
-
-  l <- fromList l output
-
-  let x = toDependent xi
-      t = toDependent target
-      o = apply l x
-      loss = mean $ (o - t) ^ 2
-      gradients = grad loss (toList l)
-      output = mysgd (ones' [1]) (toList l) gradients
-
-  printTensor loss
