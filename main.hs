@@ -3,8 +3,7 @@ import Torch
 import Control.Monad
 
 printTensor :: Tensor -> IO ()
-printTensor t = do
-  putStrLn $ (show t)
+printTensor t = putStrLn $ (show t)
 
 class Layer layer where
     numParams :: layer -> Int
@@ -46,12 +45,12 @@ type MLP = [LinearLayer]
 
 instance Layer MLP where
 
-    numParams layer = sum $ map numParams layer
+    numParams = sum . map numParams 
 
-    toList layers = foldl (\i l -> i ++ (toList l)) [] layers
+    toList = concatMap toList 
 
     apply layers input = foldl (\i l -> apply l i) input layers
-
+    
     fromList (layer:[]) tensors = sequence [fromList layer tensors]
     fromList layers tensors = do
             let layer = head layers 
@@ -61,16 +60,16 @@ instance Layer MLP where
             return (val:tailValues)
         
 mysgd :: Tensor -> [Parameter] -> [Tensor] -> [Tensor]
-mysgd lr params grads = map (\(p, g) -> (toDependent p) - lr * g) (zip params grads)
+mysgd lr params grads = 
+        let updateParams p g = (toDependent p) - lr * g
+        in zipWith updateParams params grads
 
 update :: MLP -> (Tensor, Tensor) -> IO MLP
-update model (xi, target) = do
+update model (x, y) = do
 
   let lr = 0.01 * (ones' [1])
-      x = xi
-      t = target
       o = apply model x
-      loss = mean $ (o - t) ^ 2
+      loss = mean $ (o - y) ^ 2
       gradients = grad loss (toList model)
       output = mysgd lr (toList model) gradients
 
@@ -78,18 +77,16 @@ update model (xi, target) = do
   model <- fromList model output
   return model
 
-
 createBatch :: [Int] -> (Tensor -> Tensor) -> IO (Tensor, Tensor)
 createBatch shape f = do
     x <- randIO' shape
     let y = f x
     return (x, y)
 
-
 main :: IO ()
 main = do
 
-  dataList <- sequence $ [createBatch [100, 1] Torch.sin | _ <- [1..10]]
+  dataList <- replicateM 10 $ createBatch [100, 1] Torch.sin
 
   -- initialize model
   l <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ [ (mkLinear 16 16 Torch.tanh) | _ <- [1..3]] ++ [(mkLinear 16 1 id)] 
