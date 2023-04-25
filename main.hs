@@ -4,7 +4,7 @@ import Control.Monad
 
 printTensor :: Tensor -> IO ()
 printTensor t = do
-  putStr $ (show t) ++ "\n\n"
+  putStrLn $ (show t)
 
 class Layer layer where
     numParams :: layer -> Int
@@ -63,36 +63,37 @@ instance Layer MLP where
 mysgd :: Tensor -> [Parameter] -> [Tensor] -> [Tensor]
 mysgd lr params grads = map (\(p, g) -> (toDependent p) - lr * g) (zip params grads)
 
-update :: MLP -> (IndependentTensor, IndependentTensor) -> IO MLP
+update :: MLP -> (Tensor, Tensor) -> IO MLP
 update model (xi, target) = do
 
   let lr = 0.01 * (ones' [1])
-      x = toDependent xi
-      t = toDependent target
+      x = xi
+      t = target
       o = apply model x
       loss = mean $ (o - t) ^ 2
       gradients = grad loss (toList model)
       output = mysgd lr (toList model) gradients
 
-  model <- fromList model output
   printTensor loss
+  model <- fromList model output
   return model
+
+
+createBatch :: [Int] -> (Tensor -> Tensor) -> IO (Tensor, Tensor)
+createBatch shape f = do
+    x <- randIO' shape
+    let y = f x
+    return (x, y)
+
 
 main :: IO ()
 main = do
-    
-  xi <- randIO' [100, 1]
 
-  target <- makeIndependent $ Torch.sin xi 
-  xi <- makeIndependent xi
-
-  let dataList  = (Prelude.take 100 (Prelude.repeat (xi, target)))
+  dataList <- sequence $ [createBatch [100, 1] Torch.sin | _ <- [1..10]]
 
   -- initialize model
   l <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ [ (mkLinear 16 16 Torch.tanh) | _ <- [1..3]] ++ [(mkLinear 16 1 id)] 
+
   -- train model
   output <- foldM update l dataList
-  -- Evaluate final loss
-  update output (dataList !! 0)
-  putStrLn "done"
-
+  return ()
