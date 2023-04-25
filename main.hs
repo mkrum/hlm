@@ -66,7 +66,7 @@ mysgd lr params grads = map (\(p, g) -> (toDependent p) - lr * g) (zip params gr
 update :: MLP -> (IndependentTensor, IndependentTensor) -> IO MLP
 update model (xi, target) = do
 
-  let lr = 0.001 * (ones' [1])
+  let lr = 0.01 * (ones' [1])
       x = toDependent xi
       t = toDependent target
       o = apply model x
@@ -81,12 +81,15 @@ update model (xi, target) = do
 main :: IO ()
 main = do
     
-  xi <- makeIndependent $ ones' [10, 4]
-  target <- makeIndependent $ ones' [10, 1]
+  xi <- randIO' [100, 1]
+
+  target <- makeIndependent $ Torch.sin xi 
+  xi <- makeIndependent xi
 
   let dataList  = (Prelude.take 100 (Prelude.repeat (xi, target)))
+
   -- initialize model
-  l <- sequence $ [ (mkLinear 4 4 Torch.tanh) | _ <- [1..3]] ++ [(mkLinear 4 1 id)] 
+  l <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ [ (mkLinear 16 16 Torch.tanh) | _ <- [1..3]] ++ [(mkLinear 16 1 id)] 
   -- train model
   output <- foldM update l dataList
   -- Evaluate final loss
