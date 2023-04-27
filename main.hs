@@ -64,7 +64,7 @@ mysgd lr params grads =
         let updateParams p g = (toDependent p) - lr * g
         in zipWith updateParams params grads
 
-update :: MLP -> (Tensor, Tensor) -> IO MLP
+update :: (Layer layer) => layer -> (Tensor, Tensor) -> IO layer
 update model (x, y) = do
 
   let lr = 0.01 * (ones' [1])
