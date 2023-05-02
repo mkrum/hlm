@@ -91,6 +91,14 @@ runEpoch (u:updates) model = do
         newModel <- u model
         runEpoch updates newModel
 
+lossEstimate :: (Layer layer) => layer -> IO layer
+lossEstimate model = do
+        (x, y) <- createBatch [1000, 1] Torch.sin
+        let o = apply model x
+            loss = mean $ (o - y) ^ 2
+        printTensor loss
+        return model
+
 main :: IO ()
 main = do
 
@@ -98,7 +106,7 @@ main = do
   model <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ [ (mkLinear 16 16 Torch.tanh) | _ <- [1..3]] ++ [(mkLinear 16 1 id)] 
 
   -- train model
-  let fn = replicate 10 (\x -> (createBatch [100, 1] Torch.sin) >>= (update x))
+  let fn = [lossEstimate] ++ (replicate 10 (\x -> (createBatch [100, 1] Torch.sin) >>= (update x))) ++ [lossEstimate]
   output <- runEpoch fn model
   return ()
 
