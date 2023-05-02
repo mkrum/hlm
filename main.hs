@@ -64,18 +64,17 @@ mysgd lr params grads =
         let updateParams p g = (toDependent p) - lr * g
         in zipWith updateParams params grads
 
-update :: (Layer layer) => layer -> (Tensor, Tensor) -> IO layer
-update model (x, y) = do
-
-  let lr = 0.01 * (ones' [1])
-      o = apply model x
-      loss = mean $ (o - y) ^ 2
-      gradients = grad loss (toList model)
-      output = mysgd lr (toList model) gradients
-
-  printTensor loss
-  model <- fromList model output
-  return model
+update :: (Layer layer) => IO (Tensor, Tensor) -> layer -> IO layer
+update sampler model = do
+        (x, y) <- sampler
+        let lr = 0.01 * (ones' [1])
+            o = apply model x
+            loss = mean $ (o - y) ^ 2
+            gradients = grad loss (toList model)
+            output = mysgd lr (toList model) gradients
+        printTensor loss
+        model <- fromList model output
+        return model
 
 createBatch :: [Int] -> (Tensor -> Tensor) -> IO (Tensor, Tensor)
 createBatch shape f = do
@@ -91,9 +90,9 @@ runEpoch (u:updates) model = do
         newModel <- u model
         runEpoch updates newModel
 
-lossEstimate :: (Layer layer) => layer -> IO layer
-lossEstimate model = do
-        (x, y) <- createBatch [1000, 1] Torch.sin
+lossEstimate :: (Layer layer) => IO (Tensor, Tensor) -> layer -> IO layer
+lossEstimate sampler model = do
+        (x, y) <- sampler
         let o = apply model x
             loss = mean $ (o - y) ^ 2
         printTensor loss
@@ -106,7 +105,9 @@ main = do
   model <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ [ (mkLinear 16 16 Torch.tanh) | _ <- [1..3]] ++ [(mkLinear 16 1 id)] 
 
   -- train model
-  let fn = [lossEstimate] ++ (replicate 10 (\x -> (createBatch [100, 1] Torch.sin) >>= (update x))) ++ [lossEstimate]
-  output <- runEpoch fn model
+  let sampler = createBatch [100, 1] Torch.sin
+  let updates = [lossEstimate sampler] ++ (replicate 10 (update sampler)) ++ [lossEstimate sampler]
+
+  finalModel <- runEpoch updates model
   return ()
 
