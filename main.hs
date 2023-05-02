@@ -83,14 +83,22 @@ createBatch shape f = do
     let y = f x
     return (x, y)
 
+type ModelStep l = l -> IO l
+
+runEpoch :: (Layer layer) => [ModelStep layer] -> layer -> IO layer
+runEpoch [] model = return model 
+runEpoch (u:updates) model = do
+        newModel <- u model
+        runEpoch updates newModel
+
 main :: IO ()
 main = do
 
-  dataList <- replicateM 10 $ createBatch [100, 1] Torch.sin
-
   -- initialize model
-  l <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ [ (mkLinear 16 16 Torch.tanh) | _ <- [1..3]] ++ [(mkLinear 16 1 id)] 
+  model <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ [ (mkLinear 16 16 Torch.tanh) | _ <- [1..3]] ++ [(mkLinear 16 1 id)] 
 
   -- train model
-  output <- foldM update l dataList
+  let fn = replicate 10 (\x -> (createBatch [100, 1] Torch.sin) >>= (update x))
+  output <- runEpoch fn model
   return ()
+
