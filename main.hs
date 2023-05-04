@@ -64,7 +64,7 @@ mysgd lr params grads =
         let updateParams p g = (toDependent p) - lr * g
         in zipWith updateParams params grads
 
-update :: (Layer layer) => IO (Tensor, Tensor) -> layer -> IO layer
+update :: (Layer layer) => IO (Tensor, Tensor) -> ModelStep layer
 update sampler model = do
         (x, y) <- sampler
         let lr = 0.01 * (ones' [1])
@@ -81,11 +81,10 @@ infiniteSampler shape f = do
     x <- randIO' shape
     return (x, f x)
 
-
 type ModelStep l = l -> IO l
 
-runEpoch :: (Layer layer) => [ModelStep layer] -> ModelStep layer 
-runEpoch updates model = foldM (\acc fn -> fn acc) model updates
+applySteps :: (Layer layer) => [ModelStep layer] -> ModelStep layer 
+applySteps updates model = foldM (\acc fn -> fn acc) model updates
 
 lossEstimate :: (Layer layer) => IO (Tensor, Tensor) -> ModelStep layer
 lossEstimate sampler model = do
@@ -101,11 +100,14 @@ main :: IO ()
 main = do
 
   -- initialize model
-  model <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ (replicate 3 (mkLinear 16 16 Torch.tanh)) ++ [(mkLinear 16 1 id)] 
+  model <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ (replicate 3 (mkLinear 16 16 Torch.tanh)) ++ [(mkLinear 16 1 id)]
 
   -- train model
   let sampler = infiniteSampler [100, 1] Torch.sin
-  let updates = [lossEstimate sampler] ++ (replicate 10 (update sampler)) ++ [lossEstimate sampler]
 
-  finalModel <- runEpoch updates model
+  let evalStep = [lossEstimate sampler]
+  let trainStep = [applySteps (replicate 10 (update sampler))]
+  let updates = [evalStep, trainStep, evalStep]
+
+  finalModel <- applySteps updates model
   return ()
