@@ -76,25 +76,24 @@ update sampler model = do
         model <- fromList model output
         return model
 
-createBatch :: [Int] -> (Tensor -> Tensor) -> IO (Tensor, Tensor)
-createBatch shape f = do
+infiniteSampler :: [Int] -> (Tensor -> Tensor) -> IO (Tensor, Tensor)
+infiniteSampler shape f = do
     x <- randIO' shape
-    let y = f x
-    return (x, y)
+    return (x, f x)
+
 
 type ModelStep l = l -> IO l
 
-runEpoch :: (Layer layer) => [ModelStep layer] -> layer -> IO layer
-runEpoch [] model = return model 
-runEpoch (u:updates) model = do
-        newModel <- u model
-        runEpoch updates newModel
+runEpoch :: (Layer layer) => [ModelStep layer] -> ModelStep layer 
+runEpoch updates model = foldM (\acc fn -> fn acc) model updates
 
-lossEstimate :: (Layer layer) => IO (Tensor, Tensor) -> layer -> IO layer
+lossEstimate :: (Layer layer) => IO (Tensor, Tensor) -> ModelStep layer
 lossEstimate sampler model = do
         (x, y) <- sampler
         let o = apply model x
             loss = mean $ (o - y) ^ 2
+
+        putStr "Evaluating: "
         printTensor loss
         return model
 
@@ -102,12 +101,11 @@ main :: IO ()
 main = do
 
   -- initialize model
-  model <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ [ (mkLinear 16 16 Torch.tanh) | _ <- [1..3]] ++ [(mkLinear 16 1 id)] 
+  model <- sequence $ [(mkLinear 1 16 Torch.tanh)] ++ (replicate 3 (mkLinear 16 16 Torch.tanh)) ++ [(mkLinear 16 1 id)] 
 
   -- train model
-  let sampler = createBatch [100, 1] Torch.sin
+  let sampler = infiniteSampler [100, 1] Torch.sin
   let updates = [lossEstimate sampler] ++ (replicate 10 (update sampler)) ++ [lossEstimate sampler]
 
   finalModel <- runEpoch updates model
   return ()
-
