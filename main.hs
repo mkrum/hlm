@@ -64,15 +64,15 @@ mysgd lr params grads =
         let updateParams p g = (toDependent p) - lr * g
         in zipWith updateParams params grads
 
-update :: (Layer layer) => IO (Tensor, Tensor) -> ModelStep layer
-update sampler model = do
+update :: (Layer layer) => LossFn -> IO (Tensor, Tensor) -> ModelStep layer
+update loss sampler model = do
         (x, y) <- sampler
         let lr = 0.01 * (ones' [1])
             o = apply model x
-            loss = mean $ (o - y) ^ 2
-            gradients = grad loss (toList model)
+            lossValue = loss o y
+            gradients = grad lossValue (toList model)
             output = mysgd lr (toList model) gradients
-        printTensor loss
+        printTensor lossValue
         model <- fromList model output
         return model
 
@@ -82,18 +82,18 @@ infiniteSampler shape f = do
     return (x, f x)
 
 type ModelStep l = l -> IO l
+type LossFn = Tensor -> Tensor -> Tensor
 
 applySteps :: (Layer layer) => [ModelStep layer] -> ModelStep layer 
 applySteps updates model = foldM (\acc fn -> fn acc) model updates
 
-lossEstimate :: (Layer layer) => IO (Tensor, Tensor) -> ModelStep layer
-lossEstimate sampler model = do
+lossEstimate :: (Layer layer) => LossFn -> IO (Tensor, Tensor) -> ModelStep layer
+lossEstimate loss sampler model = do
         (x, y) <- sampler
         let o = apply model x
-            loss = mean $ (o - y) ^ 2
-
+            lossValue = loss o y
         putStr "Evaluating: "
-        printTensor loss
+        printTensor lossValue
         return model
 
 main :: IO ()
@@ -105,8 +105,8 @@ main = do
   -- train model
   let sampler = infiniteSampler [100, 1] Torch.sin
 
-  let evalStep = [lossEstimate sampler]
-  let trainStep = [applySteps (replicate 10 (update sampler))]
+  let evalStep = lossEstimate mseLoss sampler
+  let trainStep = applySteps (replicate 10 (update mseLoss sampler))
   let updates = [evalStep, trainStep, evalStep]
 
   finalModel <- applySteps updates model
